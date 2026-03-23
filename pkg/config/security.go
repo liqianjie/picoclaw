@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	SecurityConfigFile = "security.yml"
+	SecurityConfigFile = ".security.yml"
 )
 
 // SecurityConfig stores all sensitive data (API keys, tokens, secrets, passwords)

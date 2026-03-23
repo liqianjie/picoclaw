@@ -2,11 +2,11 @@
 
 ## Overview
 
-This refactoring introduces a `security.yml` file to store all sensitive data (API keys, tokens, secrets, passwords) separately from the main configuration. This improves security by:
+This refactoring introduces a `.security.yml` file to store all sensitive data (API keys, tokens, secrets, passwords) separately from the main configuration. This improves security by:
 
 1. **Separation of concerns**: Configuration settings and secrets are in separate files
 2. **Easier sharing**: The main config can be shared without exposing sensitive data
-3. **Better version control**: `security.yml` can be added to `.gitignore`
+3. **Better version control**: `.security.yml` can be added to `.gitignore`
 4. **Flexible deployment**: Different environments can use different security files
 
 ## File Structure
@@ -14,14 +14,14 @@ This refactoring introduces a `security.yml` file to store all sensitive data (A
 ```
 ~/.picoclaw/
 ├── config.json          # Main configuration (safe to share)
-└── security.yml         # Security data (never share)
+└── .security.yml         # Security data (never share)
 ```
 
 ## Usage
 
 ### Basic Configuration
 
-In your `config.json`, use `ref:` references to point to values in `security.yml`:
+In your `config.json`, use `ref:` references to point to values in `.security.yml`:
 
 ```json
 {
@@ -45,7 +45,7 @@ In your `config.json`, use `ref:` references to point to values in `security.yml
 
 ### Security Configuration
 
-In your `security.yml`, store the actual values:
+In your `.security.yml`, store the actual values:
 
 ```yaml
 model_list:
@@ -135,9 +135,9 @@ The refactoring maintains full backward compatibility:
 
 1. **Direct values**: You can still use direct values in `config.json` (not recommended for production)
 2. **Mixed usage**: You can mix `ref:` references and direct values
-3. **Optional security file**: If `security.yml` doesn't exist, all references will fail (but direct values still work)
+3. **Optional security file**: If `.security.yml` doesn't exist, all references will fail (but direct values still work)
 
-### API Key Formats in security.yml
+### API Key Formats in .security.yml
 
 **Models (gpt-5.4, claude-sonnet-4.6, etc.):**
 - Must use `api_keys` (array) format
@@ -190,16 +190,16 @@ In `config.json`:
 
 ## Migration Guide
 
-### Step 1: Create security.yml
+### Step 1: Create .security.yml
 
 Copy the example template:
 ```bash
-cp security.example.yml ~/.picoclaw/security.yml
+cp security.example.yml ~/.picoclaw/.security.yml
 ```
 
 ### Step 2: Fill in your actual values
 
-Edit `~/.picoclaw/security.yml` and replace placeholder values with your actual API keys and tokens.
+Edit `~/.picoclaw/.security.yml` and replace placeholder values with your actual API keys and tokens.
 
 ### Step 3: Update config.json
 
@@ -240,11 +240,11 @@ picoclaw --version
 
 ## Security Best Practices
 
-1. **Never commit `security.yml`** to version control
-2. **Set file permissions**: `chmod 600 ~/.picoclaw/security.yml`
+1. **Never commit `.security.yml`** to version control
+2. **Set file permissions**: `chmod 600 ~/.picoclaw/.security.yml`
 3. **Use different keys** for different environments (dev, staging, production)
-4. **Rotate keys regularly** and update `security.yml`
-5. **Backup securely**: Encrypt backups containing `security.yml`
+4. **Rotate keys regularly** and update `.security.yml`
+5. **Backup securely**: Encrypt backups containing `.security.yml`
 
 ## API
 
@@ -254,7 +254,7 @@ picoclaw --version
 func LoadSecurityConfig(securityPath string) (*SecurityConfig, error)
 ```
 
-Loads the security configuration from `security.yml`. Returns an empty `SecurityConfig` if the file doesn't exist.
+Loads the security configuration from `.security.yml`. Returns an empty `SecurityConfig` if the file doesn't exist.
 
 ### SaveSecurityConfig
 
@@ -262,7 +262,7 @@ Loads the security configuration from `security.yml`. Returns an empty `Security
 func SaveSecurityConfig(securityPath string, sec *SecurityConfig) error
 ```
 
-Saves the security configuration to `security.yml` with `0o600` permissions.
+Saves the security configuration to `.security.yml` with `0o600` permissions.
 
 ### ResolveReference
 
@@ -278,7 +278,7 @@ Resolves a reference string (e.g., `"ref:model_list.test.api_key"`) and returns 
 func SecurityPath(configPath string) string
 ```
 
-Returns the path to `security.yml` relative to the config file.
+Returns the path to `.security.yml` relative to the config file.
 
 ## Example: Complete Configuration
 
@@ -323,7 +323,7 @@ Returns the path to `security.yml` relative to the config file.
 }
 ```
 
-### security.yml
+### .security.yml
 ```yaml
 model_list:
   gpt-5.4:
@@ -362,13 +362,13 @@ go test ./pkg/config -run TestSecurityConfig
 
 ### Error: "model security entry not found"
 
-- Ensure the model name in your reference matches exactly in `security.yml`
-- Check that the `model_list` section exists in `security.yml`
+- Ensure the model name in your reference matches exactly in `.security.yml`
+- Check that the `model_list` section exists in `.security.yml`
 - For models with indexed names (e.g., "gpt-5.4:0"), ensure the exact name is used or check the base name without index
 
 ### Error: "failed to load security config"
 
-- Verify `security.yml` exists in the same directory as `config.json`
+- Verify `.security.yml` exists in the same directory as `config.json`
 - Check the YAML syntax is valid (use a YAML validator)
 - Ensure file permissions allow reading
 
@@ -376,7 +376,7 @@ go test ./pkg/config -run TestSecurityConfig
 
 - Verify the reference format is correct
 - Check the path structure matches the examples above
-- Ensure all required sections exist in `security.yml`
+- Ensure all required sections exist in `.security.yml`
 
 ## Advanced Features
 
@@ -392,7 +392,7 @@ Both models and web tools support multiple API keys for improved reliability:
 
 #### Example: Model with Multiple Keys
 
-**security.yml:**
+**.security.yml:**
 ```yaml
 model_list:
   gpt-5.4:
@@ -417,7 +417,7 @@ model_list:
 
 #### Example: Web Tool with Multiple Keys
 
-**security.yml:**
+**.security.yml:**
 ```yaml
 web:
   brave:
@@ -504,7 +504,7 @@ All formats work identically in `config.json` - you always use the same referenc
 
 When you have multiple models with the same base name but different API keys, you can use indexed names:
 
-**security.yml:**
+**.security.yml:**
 ```yaml
 model_list:
   gpt-5.4:
@@ -538,7 +538,7 @@ Environment variables follow this pattern: `PICOCLAW_<SECTION>_<KEY1>_<KEY2>_<FI
 
 ### Multiple API Keys Not Working
 
-- Ensure you're using `api_keys` (plural) in `security.yml` for models and web tools (except GLMSearch)
+- Ensure you're using `api_keys` (plural) in `.security.yml` for models and web tools (except GLMSearch)
 - Check that the array format is correct in YAML (proper indentation)
 - Remember: Models, Brave, Tavily, Perplexity MUST use `api_keys` (array format)
 - GLMSearch MUST use `api_key` (single string format)

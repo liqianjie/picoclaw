@@ -118,7 +118,7 @@ chmod 600 ~/.picoclaw/security.yml
 
 ```gitignore
 # Security configuration
-security.yml
+.security.yml
 ```
 
 ## 5. Verify it works
@@ -136,7 +136,7 @@ Examples:
 - ref:model_list.gpt-5.4.api_key
 - ref:model_list.claude-sonnet-4.6.api_key
 
-**Note:** In security.yml, use `api_keys` (array) format for models.
+**Note:** In .security.yml, use `api_keys` (array) format for models.
 Both single and multiple keys should use the array format.
 
 ## Channel Tokens/Secrets
@@ -172,8 +172,8 @@ Both single and multiple keys should use the array format.
 - ref:web.glm_search.api_key
 
 **Note:**
-- Brave, Tavily, Perplexity: Use `api_keys` (array) format in security.yml
-- GLMSearch: Use `api_key` (single string) format in security.yml
+- Brave, Tavily, Perplexity: Use `api_keys` (array) format in .security.yml
+- GLMSearch: Use `api_key` (single string) format in .security.yml
 
 ## Skills Registry Tokens
 - ref:skills.github.token
@@ -206,7 +206,7 @@ You can also mix references and direct values:
 	  "model_list": [
 	    {
 	      "model_name": "cloud-model",
-	      "api_key": "ref:model_list.cloud-model.api_key"  // From security.yml
+	      "api_key": "ref:model_list.cloud-model.api_key"  // From .security.yml
 	    },
 	    {
 	      "model_name": "local-model",
@@ -226,11 +226,11 @@ cp ~/.picoclaw/config.json ~/.picoclaw/config.json.backup
 
 ## Step 2: Copy the example security file
 ```bash
-cp security.example.yml ~/.picoclaw/security.yml
+cp security.example.yml ~/.picoclaw/.security.yml
 ```
 
 ## Step 3: Fill in your API keys
-Edit ~/.picoclaw/security.yml and replace placeholders with your actual keys.
+Edit ~/.picoclaw/.security.yml and replace placeholders with your actual keys.
 
 ## Step 4: Update config.json references
 Replace sensitive values in ~/.picoclaw/config.json with ref: references.
@@ -255,7 +255,7 @@ You can configure multiple API keys for both models and web tools to enable:
 
 ### Example: Model with Multiple Keys
 
-**security.yml:**
+**.security.yml:**
 ```yaml
 model_list:
 
@@ -284,7 +284,7 @@ model_list:
 
 ### Example: Web Tool with Multiple Keys
 
-**security.yml:**
+**.security.yml:**
 ```yaml
 web:
 
@@ -342,12 +342,12 @@ model_list:
 
 ```
 
-**Important:** All model keys in security.yml must use the `api_keys` (plural) array format.
+**Important:** All model keys in .security.yml must use the `api_keys` (plural) array format.
 The single `api_key` (singular) format is NOT supported for models.
 
 ### Model Index Matching
 
-The system supports intelligent model name matching in security.yml:
+The system supports intelligent model name matching in .security.yml:
 
 **Example 1: Exact Match**
 ```yaml
@@ -357,7 +357,7 @@ The system supports intelligent model name matching in security.yml:
 	  "model_name": "gpt-5.4:0"
 	}
 
-# security.yml (exact match with index)
+# .security.yml (exact match with index)
 model_list:
 
 	gpt-5.4:0:
@@ -373,7 +373,7 @@ model_list:
 	  "model_name": "gpt-5.4:0"
 	}
 
-# security.yml (base name without index)
+# .security.yml (base name without index)
 model_list:
 
 	gpt-5.4:
@@ -381,7 +381,7 @@ model_list:
 
 ```
 
-Both methods work. The base name match allows you to use simpler keys in security.yml
+Both methods work. The base name match allows you to use simpler keys in .security.yml
 even when your config uses indexed model names for load balancing.
 
 ### Security File Permissions
@@ -389,34 +389,34 @@ even when your config uses indexed model names for load balancing.
 The security file should have restricted permissions:
 
 ```bash
-chmod 600 ~/.picoclaw/security.yml
+chmod 600 ~/.picoclaw/.security.yml
 ```
 
 This ensures only the owner can read and write the file.
 
 # Security Best Practices
 
-1. Never commit security.yml to version control
-2. Set file permissions: chmod 600 ~/.picoclaw/security.yml
+1. Never commit .security.yml to version control
+2. Set file permissions: chmod 600 ~/.picoclaw/.security.yml
 3. Use different keys for different environments
-4. Rotate keys regularly and update security.yml
-5. Encrypt backups containing security.yml
+4. Rotate keys regularly and update .security.yml
+5. Encrypt backups containing .security.yml
 
 # Troubleshooting
 
 ## Error: "model security entry not found"
-- Check that the model name in config.json matches exactly in security.yml
-- Verify the model_list section exists in security.yml
+- Check that the model name in config.json matches exactly in .security.yml
+- Verify the model_list section exists in .security.yml
 
 ## Error: "failed to load security config"
-- Ensure security.yml exists in the same directory as config.json
+- Ensure .security.yml exists in the same directory as config.json
 - Check YAML syntax is valid
 - Verify file permissions allow reading
 
 ## Error: "unknown reference path"
 - Verify the reference format is correct
 - Check the path structure matches the examples above
-- Ensure all required sections exist in security.yml
+- Ensure all required sections exist in .security.yml
 */
 package config
 

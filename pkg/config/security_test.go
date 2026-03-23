@@ -16,7 +16,7 @@ import (
 
 func TestSecurityConfig(t *testing.T) {
 	t.Run("LoadNonExistent", func(t *testing.T) {
-		sec, err := loadSecurityConfig("/nonexistent/security.yml")
+		sec, err := loadSecurityConfig("/nonexistent/.security.yml")
 		require.NoError(t, err)
 		assert.NotNil(t, sec)
 		assert.Empty(t, sec.ModelList)
@@ -32,12 +32,12 @@ func TestSecurityPath(t *testing.T) {
 		{
 			name:      "standard path",
 			configDir: "/home/user/.picoclaw/config.json",
-			want:      "/home/user/.picoclaw/security.yml",
+			want:      "/home/user/.picoclaw/.security.yml",
 		},
 		{
 			name:      "nested path",
 			configDir: "/path/to/config/myconfig.json",
-			want:      "/path/to/config/security.yml",
+			want:      "/path/to/config/.security.yml",
 		},
 	}
 
@@ -51,7 +51,7 @@ func TestSecurityPath(t *testing.T) {
 
 func TestSaveAndLoadSecurityConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	secPath := filepath.Join(tmpDir, "security.yml")
+	secPath := filepath.Join(tmpDir, SecurityConfigFile)
 
 	original := &SecurityConfig{
 		ModelList: map[string]ModelSecurityEntry{

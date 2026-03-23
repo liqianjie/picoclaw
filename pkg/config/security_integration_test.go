@@ -80,8 +80,8 @@ func TestSecurityConfigIntegration(t *testing.T) {
 		err := os.WriteFile(configPath, []byte(configContent), 0o644)
 		require.NoError(t, err)
 
-		// Create security.yml with actual values
-		securityPath := filepath.Join(tmpDir, "security.yml")
+		// Create .security.yml with actual values
+		securityPath := filepath.Join(tmpDir, SecurityConfigFile)
 		securityContent := `model_list:
   test-model:
     api_keys:
@@ -141,8 +141,8 @@ func TestSecurityConfigWithAPIKeysArray(t *testing.T) {
 		err := os.WriteFile(configPath, []byte(configContent), 0o644)
 		require.NoError(t, err)
 
-		// Create security.yml
-		securityPath := filepath.Join(tmpDir, "security.yml")
+		// Create .security.yml
+		securityPath := filepath.Join(tmpDir, SecurityConfigFile)
 		securityContent := `model_list:
   multi-key-model:0:
     api_key: "sk-key-1"
@@ -197,7 +197,7 @@ func TestAllSecurityKeysAccessible(t *testing.T) {
 		err = os.WriteFile(clawhubAuthTokenFile, []byte("clawhub-auth-token-from-file"), 0o600)
 		require.NoError(t, err)
 
-		// Create config.json without sensitive values (they'll be in security.yml)
+		// Create config.json without sensitive values (they'll be in .security.yml)
 		configPath := filepath.Join(tmpDir, "config.json")
 		configContent := `{
   "version": 1,
@@ -288,8 +288,8 @@ func TestAllSecurityKeysAccessible(t *testing.T) {
 		err = os.WriteFile(configPath, []byte(configContent), 0o644)
 		require.NoError(t, err)
 
-		// Create security.yml with file:// references and plaintext values
-		securityPath := filepath.Join(tmpDir, "security.yml")
+		// Create .security.yml with file:// references and plaintext values
+		securityPath := filepath.Join(tmpDir, SecurityConfigFile)
 		securityContent := `model_list:
   test-model-1:
     api_keys:

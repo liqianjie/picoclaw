@@ -1341,7 +1341,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load security config: %w", err)
 	}
 
-	// Apply security references from security.yml BEFORE resolveAPIKeys
+	// Apply security references from .security.yml BEFORE resolveAPIKeys
 	// This resolves ref: references to actual values
 	if err := applySecurityConfig(cfg, sec); err != nil {
 		return nil, fmt.Errorf("failed to apply security config: %w", err)
@@ -1404,7 +1404,7 @@ func copyArray[T any](dst, src *[]T) {
 }
 
 // applySecurityConfig resolves all security references in config
-// It checks each field for "ref:" prefixed values and resolves them from security.yml
+// It checks each field for "ref:" prefixed values and resolves them from .security.yml
 func applySecurityConfig(cfg *Config, sec *SecurityConfig) error {
 	if sec == nil {
 		return nil
@@ -1444,7 +1444,7 @@ func applySecurityConfig(cfg *Config, sec *SecurityConfig) error {
 		}
 
 		// Try match without index suffix (e.g., "abc" -> "abc")
-		// This allows security.yml to use simpler keys like "test-model" instead of "test-model:0"
+		// This allows .security.yml to use simpler keys like "test-model" instead of "test-model:0"
 		baseName := model.ModelName
 		if entry, exists := sec.ModelList[baseName]; exists {
 			copyArray(&model.apiKeys, &entry.APIKeys)
@@ -1838,7 +1838,7 @@ func SaveConfig(path string, cfg *Config) error {
 		}
 	}
 	if err := saveSecurityConfig(securityPath(path), cfg.security); err != nil {
-		logger.ErrorCF("config", "cannot save security.yml", map[string]any{"error": err})
+		logger.ErrorCF("config", "cannot save .security.yml", map[string]any{"error": err})
 		return err
 	}
 
