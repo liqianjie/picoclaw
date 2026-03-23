@@ -2413,6 +2413,47 @@ turnLoop:
 			if toolResult == nil {
 				toolResult = tools.ErrorResult("hook returned nil tool result")
 			}
+			if len(toolResult.Media) > 0 && toolResult.ResponseHandled {
+				parts := make([]bus.MediaPart, 0, len(toolResult.Media))
+				for _, ref := range toolResult.Media {
+					part := bus.MediaPart{Ref: ref}
+					if al.mediaStore != nil {
+						if _, meta, err := al.mediaStore.ResolveWithMeta(ref); err == nil {
+							part.Filename = meta.Filename
+							part.ContentType = meta.ContentType
+							part.Type = inferMediaType(meta.Filename, meta.ContentType)
+						}
+					}
+					parts = append(parts, part)
+				}
+				outboundMedia := bus.OutboundMediaMessage{
+					Channel: ts.channel,
+					ChatID:  ts.chatID,
+					Parts:   parts,
+				}
+				if al.channelManager != nil && ts.channel != "" && !constants.IsInternalChannel(ts.channel) {
+					if err := al.channelManager.SendMedia(ctx, outboundMedia); err != nil {
+						logger.WarnCF("agent", "Failed to deliver handled tool media",
+							map[string]any{
+								"agent_id": ts.agent.ID,
+								"tool":     toolName,
+								"channel":  ts.channel,
+								"chat_id":  ts.chatID,
+								"error":    err.Error(),
+							})
+						toolResult = tools.ErrorResult(fmt.Sprintf("failed to deliver attachment: %v", err)).WithError(err)
+					}
+				} else if al.bus != nil {
+					al.bus.PublishOutboundMedia(ctx, outboundMedia)
+					// Queuing media is only best-effort; it has not been delivered yet.
+					toolResult.ResponseHandled = false
+				}
+			}
+
+			if len(toolResult.Media) > 0 && !toolResult.ResponseHandled {
+				toolResult.ArtifactTags = buildArtifactTags(al.mediaStore, toolResult.Media)
+			}
+
 			if !toolResult.ResponseHandled {
 				allResponsesHandled = false
 			}
@@ -2430,29 +2471,6 @@ turnLoop:
 					})
 			}
 
-			if len(toolResult.Media) > 0 && toolResult.ResponseHandled {
-				parts := make([]bus.MediaPart, 0, len(toolResult.Media))
-				for _, ref := range toolResult.Media {
-					part := bus.MediaPart{Ref: ref}
-					if al.mediaStore != nil {
-						if _, meta, err := al.mediaStore.ResolveWithMeta(ref); err == nil {
-							part.Filename = meta.Filename
-							part.ContentType = meta.ContentType
-							part.Type = inferMediaType(meta.Filename, meta.ContentType)
-						}
-					}
-					parts = append(parts, part)
-				}
-				al.bus.PublishOutboundMedia(ctx, bus.OutboundMediaMessage{
-					Channel: ts.channel,
-					ChatID:  ts.chatID,
-					Parts:   parts,
-				})
-			}
-
-			if len(toolResult.Media) > 0 && !toolResult.ResponseHandled {
-				toolResult.ArtifactTags = buildArtifactTags(al.mediaStore, toolResult.Media)
-			}
 			contentForLLM := toolResult.ContentForLLM()
 
 			toolResultMsg := providers.Message{
@@ -2543,6 +2561,29 @@ turnLoop:
 		}
 
 		if allResponsesHandled {
+			if len(pendingMessages) > 0 {
+				logger.InfoCF("agent", "Pending steering exists after handled tool delivery; continuing turn before finalizing",
+					map[string]any{
+						"agent_id":       ts.agent.ID,
+						"steering_count": len(pendingMessages),
+						"session_key":    ts.sessionKey,
+					})
+				finalContent = ""
+				goto turnLoop
+			}
+
+			if steerMsgs := al.dequeueSteeringMessagesForScope(ts.sessionKey); len(steerMsgs) > 0 {
+				logger.InfoCF("agent", "Steering arrived after handled tool delivery; continuing turn before finalizing",
+					map[string]any{
+						"agent_id":       ts.agent.ID,
+						"steering_count": len(steerMsgs),
+						"session_key":    ts.sessionKey,
+					})
+				pendingMessages = append(pendingMessages, steerMsgs...)
+				finalContent = ""
+				goto turnLoop
+			}
+
 			summaryMsg := providers.Message{
 				Role:    "assistant",
 				Content: handledToolResponseSummary,
