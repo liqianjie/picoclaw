@@ -169,7 +169,9 @@
     },
     "badge": {
       "default": "默认",
-      "virtual": "虚拟"
+      "virtual": "虚拟",
+      "vision": "视觉",
+      "visionOnly": "仅视觉"
     },
     "action": {
       "edit": "编辑 API Key",
@@ -179,6 +181,14 @@
     "defaultOnSave": {
       "label": "默认模型",
       "description": "保存后自动将该模型设置为默认模型。"
+    },
+    "vision": {
+      "label": "视觉 / 多模态",
+      "description": "该模型支持图片输入，开启后可用于截图分析和视觉任务。"
+    },
+    "visionOnly": {
+      "label": "仅视觉（不可用于聊天）",
+      "description": "该模型仅用于图片分析，不适合作为主聊天模型。例如：glm-4v-flash。"
     },
     "add": {
       "button": "添加模型",

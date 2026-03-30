@@ -176,6 +176,26 @@ function Sidebar({
     )
   }
 
+  // Force-clean body/html styles that Radix Dialog + react-remove-scroll
+  // may leave behind when the Sheet is closed programmatically.
+  // Radix sets body { pointer-events: none } and react-remove-scroll sets
+  // html[data-scroll-locked] { overflow: hidden; padding-right: Npx }.
+  // In Android WebView these are not always cleaned up reliably.
+  React.useEffect(() => {
+    if (!openMobile) {
+      const timer = setTimeout(() => {
+        document.body.style.pointerEvents = ""
+        document.body.style.overflow = ""
+        const html = document.documentElement
+        html.removeAttribute("data-scroll-locked")
+        html.style.overflow = ""
+        html.style.paddingRight = ""
+        html.style.marginRight = ""
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [openMobile])
+
   if (isMobile) {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>

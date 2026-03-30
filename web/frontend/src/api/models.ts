@@ -19,6 +19,9 @@ export interface ModelInfo {
   request_timeout?: number
   thinking_level?: string
   extra_body?: Record<string, unknown>
+  // Capabilities
+  vision?: boolean
+  vision_only?: boolean
   // Meta
   configured: boolean
   is_default: boolean

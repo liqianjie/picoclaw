@@ -169,7 +169,9 @@
     },
     "badge": {
       "default": "Default",
-      "virtual": "Virtual"
+      "virtual": "Virtual",
+      "vision": "Vision",
+      "visionOnly": "Vision Only"
     },
     "action": {
       "edit": "Edit API key",
@@ -179,6 +181,14 @@
     "defaultOnSave": {
       "label": "Default Model",
       "description": "Automatically set this model as default after saving."
+    },
+    "vision": {
+      "label": "Vision / Multimodal",
+      "description": "This model supports image inputs. Enable to use it for screenshot analysis and visual tasks."
+    },
+    "visionOnly": {
+      "label": "Vision Only (not for chat)",
+      "description": "This model is specialized for image analysis only and should not be used as the main chat model. Example: glm-4v-flash."
     },
     "add": {
       "button": "Add Model",

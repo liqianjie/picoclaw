@@ -70,6 +70,11 @@ export function ModelCard({
               {t("models.badge.virtual")}
             </span>
           )}
+          {model.vision && (
+            <span className="bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0 rounded px-1.5 py-0.5 text-[10px] leading-none font-medium">
+              {model.vision_only ? t("models.badge.visionOnly") : t("models.badge.vision")}
+            </span>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">

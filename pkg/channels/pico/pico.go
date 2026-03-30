@@ -2,9 +2,11 @@ package pico
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +20,8 @@ import (
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/identity"
 	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/sipeed/picoclaw/pkg/media"
+	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
 // picoConn represents a single WebSocket connection.
@@ -61,6 +65,8 @@ type PicoChannel struct {
 	connsMu            sync.RWMutex
 	ctx                context.Context
 	cancel             context.CancelFunc
+	accessibilityTool  *tools.AccessibilityTool // 无障碍操作工具引用
+	mediaStore         media.MediaStore          // 用于解析 media ref → 本地文件路径
 }
 
 // NewPicoChannel creates a new Pico Protocol channel.
@@ -291,27 +297,54 @@ func (c *PicoChannel) SendPlaceholder(ctx context.Context, chatID string) (strin
 }
 
 // broadcastToSession sends a message to all connections with a matching session.
+// 如果当前没有活跃连接，会等待客户端重连后重试（最多等待 15 秒）。
 func (c *PicoChannel) broadcastToSession(chatID string, msg PicoMessage) error {
 	// chatID format: "pico:<sessionID>"
 	sessionID := strings.TrimPrefix(chatID, "pico:")
 	msg.SessionID = sessionID
 
-	var sent bool
-	for _, pc := range c.sessionConnectionsSnapshot(sessionID) {
-		if err := pc.writeJSON(msg); err != nil {
-			logger.DebugCF("pico", "Write to connection failed", map[string]any{
-				"conn_id": pc.id,
-				"error":   err.Error(),
-			})
-		} else {
-			sent = true
+	// 最多重试 5 次，每次间隔 3 秒，总共等待 15 秒
+	const maxRetries = 5
+	const retryInterval = 3 * time.Second
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		var sent bool
+		for _, pc := range c.sessionConnectionsSnapshot(sessionID) {
+			if err := pc.writeJSON(msg); err != nil {
+				logger.DebugCF("pico", "Write to connection failed", map[string]any{
+					"conn_id": pc.id,
+					"error":   err.Error(),
+				})
+			} else {
+				sent = true
+			}
+		}
+
+		if sent {
+			return nil
+		}
+
+		// 最后一次尝试失败，不再等待
+		if attempt == maxRetries {
+			break
+		}
+
+		logger.DebugCF("pico", "No active connections, waiting for reconnect", map[string]any{
+			"session_id": sessionID,
+			"attempt":    attempt + 1,
+			"max":        maxRetries,
+		})
+
+		// 等待一段时间让客户端重连，同时检查 context 是否已取消
+		select {
+		case <-c.ctx.Done():
+			return fmt.Errorf("channel stopped while waiting for connection: %w", c.ctx.Err())
+		case <-time.After(retryInterval):
+			// 继续重试
 		}
 	}
 
-	if !sent {
-		return fmt.Errorf("no active connections for session %s: %w", sessionID, channels.ErrSendFailed)
-	}
-	return nil
+	return fmt.Errorf("no active connections for session %s after %d retries: %w", sessionID, maxRetries, channels.ErrSendFailed)
 }
 
 // handleWebSocket upgrades the HTTP connection and manages the WebSocket lifecycle.
@@ -516,6 +549,9 @@ func (c *PicoChannel) handleMessage(pc *picoConn, msg PicoMessage) {
 	case TypeMessageSend:
 		c.handleMessageSend(pc, msg)
 
+	case TypeActionResult:
+		c.handleActionResult(pc, msg)
+
 	default:
 		errMsg := newError("unknown_type", fmt.Sprintf("unknown message type: %s", msg.Type))
 		pc.writeJSON(errMsg)
@@ -572,4 +608,185 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return string(runes[:maxLen]) + "..."
+}
+
+// SetAccessibilityTool 设置无障碍操作工具引用，用于接收 action.result 时投递结果。
+func (c *PicoChannel) SetAccessibilityTool(tool *tools.AccessibilityTool) {
+	c.accessibilityTool = tool
+}
+
+// SetMediaStore 设置 MediaStore，用于将 media ref 解析为本地文件并发送给 WebSocket 客户端。
+func (c *PicoChannel) SetMediaStore(store media.MediaStore) {
+	c.mediaStore = store
+}
+
+// SendMedia implements channels.MediaSender.
+// 将媒体文件读取为 base64 编码的 data URL，通过 media.create WebSocket 消息发送给客户端。
+func (c *PicoChannel) SendMedia(ctx context.Context, msg bus.OutboundMediaMessage) error {
+	if !c.IsRunning() {
+		return channels.ErrNotRunning
+	}
+
+	store := c.mediaStore
+	if store == nil {
+		return fmt.Errorf("no media store available: %w", channels.ErrSendFailed)
+	}
+
+	for _, part := range msg.Parts {
+		localPath, err := store.Resolve(part.Ref)
+		if err != nil {
+			logger.ErrorCF("pico", "Failed to resolve media ref", map[string]any{
+				"ref":   part.Ref,
+				"error": err.Error(),
+			})
+			continue
+		}
+
+		data, err := os.ReadFile(localPath)
+		if err != nil {
+			logger.ErrorCF("pico", "Failed to read media file", map[string]any{
+				"path":  localPath,
+				"error": err.Error(),
+			})
+			continue
+		}
+
+		contentType := part.ContentType
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+
+		// 构建 data URL
+		dataURL := fmt.Sprintf("data:%s;base64,%s", contentType, base64.StdEncoding.EncodeToString(data))
+
+		payload := map[string]any{
+			"type":         part.Type, // "image" | "audio" | "video" | "file"
+			"filename":     part.Filename,
+			"content_type": contentType,
+			"data":         dataURL,
+		}
+		if part.Caption != "" {
+			payload["caption"] = part.Caption
+		}
+
+		outMsg := newMessage(TypeMediaCreate, payload)
+
+		if err := c.broadcastToSession(msg.ChatID, outMsg); err != nil {
+			logger.ErrorCF("pico", "Failed to send media to session", map[string]any{
+				"chat_id": msg.ChatID,
+				"error":   err.Error(),
+			})
+			return fmt.Errorf("failed to send media: %w", err)
+		}
+
+		logger.InfoCF("pico", "Media sent to client", map[string]any{
+			"type":     part.Type,
+			"filename": part.Filename,
+			"size":     len(data),
+		})
+	}
+
+	return nil
+}
+
+// SendActionExecute 向已连接的 Pico 客户端发送无障碍操作执行指令。
+// 无障碍操作始终发送到所有活跃的 WebSocket 连接（因为手机上通常只有一个本地连接），
+// 而不是按 session ID 匹配——触发消息可能来自 QQ 等其他通道，其 chatID 与 Pico 的 session ID 不同。
+// requestID 用于匹配 Android 端返回的 action.result。
+func (c *PicoChannel) SendActionExecute(chatID, requestID string, action map[string]any) error {
+	if !c.IsRunning() {
+		return channels.ErrNotRunning
+	}
+
+	payload := make(map[string]any)
+	for k, v := range action {
+		payload[k] = v
+	}
+	payload["request_id"] = requestID
+
+	outMsg := newMessage(TypeActionExecute, payload)
+
+	logger.InfoCF("pico", "Sending accessibility action", map[string]any{
+		"chat_id":    chatID,
+		"request_id": requestID,
+		"action":     action["action"],
+	})
+
+	return c.broadcastToAnyConnection(outMsg)
+}
+
+// broadcastToAnyConnection 将消息广播到所有活跃的 Pico WebSocket 连接。
+// 用于无障碍操作等场景——因为连接池中同时有 WebView 和 A11yBridge，
+// 必须广播给所有连接才能确保 A11yBridge 收到 action.execute。
+// WebView 会忽略不认识的消息类型，A11yBridge 会处理并返回 action.result。
+// 如果当前没有活跃连接，会等待客户端重连后重试（最多等待 15 秒）。
+func (c *PicoChannel) broadcastToAnyConnection(msg PicoMessage) error {
+	const maxRetries = 5
+	const retryInterval = 3 * time.Second
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		var sentCount int
+		c.connsMu.RLock()
+		for _, pc := range c.connections {
+			if err := pc.writeJSON(msg); err != nil {
+				logger.DebugCF("pico", "Write to connection failed", map[string]any{
+					"conn_id": pc.id,
+					"error":   err.Error(),
+				})
+			} else {
+				sentCount++
+			}
+		}
+		c.connsMu.RUnlock()
+
+		if sentCount > 0 {
+			return nil
+		}
+
+		if attempt == maxRetries {
+			break
+		}
+
+		logger.DebugCF("pico", "No active Pico connections for action, waiting for reconnect", map[string]any{
+			"attempt": attempt + 1,
+			"max":     maxRetries,
+		})
+
+		select {
+		case <-c.ctx.Done():
+			return fmt.Errorf("channel stopped while waiting for connection: %w", c.ctx.Err())
+		case <-time.After(retryInterval):
+		}
+	}
+
+	return fmt.Errorf("no active Pico connections after %d retries: %w", maxRetries, channels.ErrSendFailed)
+}
+
+// handleActionResult 处理 Android 端返回的无障碍操作执行结果。
+func (c *PicoChannel) handleActionResult(pc *picoConn, msg PicoMessage) {
+	requestID, _ := msg.Payload["request_id"].(string)
+	if requestID == "" {
+		logger.WarnCF("pico", "Received action.result without request_id", nil)
+		return
+	}
+
+	success, _ := msg.Payload["success"].(bool)
+	message, _ := msg.Payload["message"].(string)
+
+	logger.InfoCF("pico", "Received action result", map[string]any{
+		"request_id": requestID,
+		"success":    success,
+		"message":    message,
+	})
+
+	if c.accessibilityTool != nil {
+		c.accessibilityTool.DeliverResult(requestID, tools.ActionResult{
+			Success: success,
+			Message: message,
+		})
+	} else {
+		logger.WarnCF("pico", "Received action.result but no accessibility tool registered", map[string]any{
+			"request_id": requestID,
+		})
+	}
 }

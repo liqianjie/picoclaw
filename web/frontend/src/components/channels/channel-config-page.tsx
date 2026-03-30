@@ -81,6 +81,14 @@ function normalizeConfig(
   if (channel.name === "whatsapp") {
     config.use_native = false
   }
+  // Ensure required secret fields exist even when the backend omits them
+  // (e.g. SecureString fields with omitzero tag return nothing when empty).
+  const requiredKeys = getRequiredFieldKeys(channel.name)
+  for (const key of requiredKeys) {
+    if (!(key in config)) {
+      config[key] = ""
+    }
+  }
   return config
 }
 
@@ -98,7 +106,12 @@ function buildSavePayload(
     if (key in SECRET_FIELD_MAP) {
       const editKey = SECRET_FIELD_MAP[key]
       const incoming = asString(editConfig[editKey])
-      payload[key] = incoming !== "" ? incoming : value
+      if (incoming !== "") {
+        // User entered a new secret — include it in the payload
+        payload[key] = incoming
+      }
+      // Otherwise omit the field entirely so the backend keeps the
+      // existing value from .security.yml untouched.
       continue
     }
 
@@ -368,9 +381,15 @@ export function ChannelConfigPage({ channelName }: ChannelConfigPageProps) {
   const handleSave = async () => {
     if (!channel || !savePayload) return
 
-    const missingRequiredFields = requiredKeys.filter((key) =>
-      isMissingRequiredValue(savePayload[key]),
-    )
+    const missingRequiredFields = requiredKeys.filter((key) => {
+      // For secret fields on an already-configured channel, the backend
+      // preserves the existing value from .security.yml when the field is
+      // omitted from the patch payload, so we should not treat them as missing.
+      if (configured && key in SECRET_FIELD_MAP) {
+        return false
+      }
+      return isMissingRequiredValue(savePayload[key])
+    })
     if (missingRequiredFields.length > 0) {
       const requiredFieldError = t("channels.validation.requiredField")
       const nextFieldErrors: Record<string, string> = {}

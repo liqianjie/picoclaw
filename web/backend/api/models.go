@@ -43,6 +43,9 @@ type modelResponse struct {
 	Configured bool `json:"configured"`
 	IsDefault  bool `json:"is_default"`
 	IsVirtual  bool `json:"is_virtual"`
+	// Capabilities
+	Vision     bool `json:"vision"`
+	VisionOnly bool `json:"vision_only"`
 }
 
 // handleListModels returns all model_list entries with masked API keys.
@@ -88,6 +91,8 @@ func (h *Handler) handleListModels(w http.ResponseWriter, r *http.Request) {
 			Configured:     configured[i],
 			IsDefault:      m.ModelName == defaultModel,
 			IsVirtual:      m.IsVirtual(),
+			Vision:         m.Vision,
+			VisionOnly:     m.VisionOnly,
 		})
 	}
 

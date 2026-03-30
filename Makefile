@@ -186,6 +186,24 @@ build-linux-mipsle: generate
 	$(call PATCH_MIPS_FLAGS,$(BUILD_DIR)/$(BINARY_NAME)-linux-mipsle)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)-linux-mipsle"
 
+## build-android: Build picoclaw + picoclaw-web for Android (ARM64), output to build/
+## NOTE: Must use GOOS=android (not linux) so Go stdlib avoids pidfd_open syscall,
+## which triggers SIGSYS on Android's seccomp filter (kernel <5.3).
+build-android: generate
+	@echo "Building picoclaw for Android (android/arm64)..."
+	@mkdir -p $(BUILD_DIR)
+	GOOS=android GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/libpicoclaw.so ./$(CMD_DIR)
+	@echo "Build complete: $(BUILD_DIR)/libpicoclaw.so"
+	@echo "Building picoclaw-web for Android (android/arm64)..."
+	@if [ ! -f web/backend/dist/index.html ]; then \
+		echo "  Building frontend first..."; \
+		cd web/frontend && pnpm install && pnpm build:backend; \
+	fi
+	GOOS=android GOARCH=arm64 $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/libpicoclaw-web.so ./web/backend
+	@echo "Build complete: $(BUILD_DIR)/libpicoclaw-web.so"
+	@echo ""
+	@ls -lh $(BUILD_DIR)/libpicoclaw.so $(BUILD_DIR)/libpicoclaw-web.so
+
 ## build-pi-zero: Build for Raspberry Pi Zero 2 W (32-bit and 64-bit)
 build-pi-zero: build-linux-arm build-linux-arm64
 	@echo "Pi Zero 2 W builds: $(BUILD_DIR)/$(BINARY_NAME)-linux-arm (32-bit), $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 (64-bit)"

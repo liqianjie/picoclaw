@@ -515,16 +515,19 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	m.dispatchTask = &asyncTask{cancel: cancel}
 
 	for name, channel := range m.channels {
+		fmt.Printf("  → Starting channel: %s\n", name)
 		logger.InfoCF("channels", "Starting channel", map[string]any{
 			"channel": name,
 		})
 		if err := channel.Start(ctx); err != nil {
+			fmt.Printf("  ✗ Channel %s failed to start: %s\n", name, err.Error())
 			logger.ErrorCF("channels", "Failed to start channel", map[string]any{
 				"channel": name,
 				"error":   err.Error(),
 			})
 			continue
 		}
+		fmt.Printf("  ✓ Channel %s started successfully\n", name)
 		// Lazily create worker only after channel starts successfully
 		w := newChannelWorker(name, channel)
 		m.workers[name] = w

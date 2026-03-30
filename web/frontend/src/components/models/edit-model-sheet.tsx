@@ -65,6 +65,8 @@ export function EditModelSheet({
   })
   const [saving, setSaving] = useState(false)
   const [setAsDefault, setSetAsDefault] = useState(false)
+  const [vision, setVision] = useState(false)
+  const [visionOnly, setVisionOnly] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -87,6 +89,8 @@ export function EditModelSheet({
           : "",
       })
       setSetAsDefault(model.is_default)
+      setVision(model.vision ?? false)
+      setVisionOnly(model.vision_only ?? false)
       setError("")
     }
   }, [model])
@@ -119,6 +123,8 @@ export function EditModelSheet({
         extra_body: form.extraBody.trim()
           ? JSON.parse(form.extraBody.trim())
           : {},
+        vision: vision,
+        vision_only: visionOnly,
       })
       if (setAsDefault && !model.is_default) {
         await setDefaultModel(model.model_name)
@@ -190,6 +196,25 @@ export function EditModelSheet({
               checked={setAsDefault}
               onCheckedChange={setSetAsDefault}
             />
+
+            <SwitchCardField
+              label={t("models.vision.label")}
+              hint={t("models.vision.description")}
+              checked={vision}
+              onCheckedChange={(v) => {
+                setVision(v)
+                if (!v) setVisionOnly(false)
+              }}
+            />
+
+            {vision && (
+              <SwitchCardField
+                label={t("models.visionOnly.label")}
+                hint={t("models.visionOnly.description")}
+                checked={visionOnly}
+                onCheckedChange={setVisionOnly}
+              />
+            )}
 
             <AdvancedSection>
               <Field

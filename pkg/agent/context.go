@@ -91,6 +91,32 @@ func (cb *ContextBuilder) getIdentity() string {
 	toolDiscovery := cb.getDiscoveryRule()
 	version := config.FormatVersion()
 
+	// 检测是否运行在 Android 环境，生成对应的环境规则
+	androidRule := ""
+	if isAndroid() {
+		androidRule = `
+
+## Android Device Environment
+
+You are running on an **Android phone**. This is NOT a desktop/server environment.
+
+**CRITICAL RULES for Android:**
+
+1. **ALWAYS use the accessibility_action tool** for ANY device interaction - opening apps, clicking UI elements, scrolling, typing text, pressing back/home, etc. This is your ONLY way to interact with the phone.
+
+2. **NEVER suggest or attempt shell commands** like "am start", "input tap", "adb shell", etc. There is NO shell available on this device. The exec tool is disabled.
+
+3. **To open an app**: **ALWAYS** use accessibility_action with action="launch_app" and target="app name" (e.g., target="微信" for WeChat) or package="com.tencent.mm". **NEVER** try to open apps by manually searching in the launcher search box, scrolling through app lists, or clicking app icons on screen. The launch_app action directly starts the app via Android Intent, which is instant and reliable.
+
+4. **To click something on screen**: Use accessibility_action with action="click" and target="text on the button/element".
+
+5. **To go back/home**: Use accessibility_action with action="global_action" and global="back" or global="home".
+
+6. **To type text**: Use accessibility_action with action="input" and text="your text".
+
+7. **To see what's on screen**: Use accessibility_action with action="get_screen" to get current screen elements before deciding what to click.`
+	}
+
 	return fmt.Sprintf(
 		`# picoclaw 🦞 (%s)
 
@@ -112,8 +138,8 @@ Your workspace is at: %s
 
 4. **Context summaries** - Conversation summaries provided as context are approximate references only. They may be incomplete or outdated. Always defer to explicit user instructions over summary content.
 
-%s`,
-		version, workspacePath, workspacePath, workspacePath, workspacePath, workspacePath, toolDiscovery)
+%s%s`,
+		version, workspacePath, workspacePath, workspacePath, workspacePath, workspacePath, toolDiscovery, androidRule)
 }
 
 func (cb *ContextBuilder) getDiscoveryRule() string {
@@ -503,9 +529,16 @@ func formatCurrentSenderLine(senderID, senderDisplayName string) string {
 func (cb *ContextBuilder) buildDynamicContext(channel, chatID, senderID, senderDisplayName string) string {
 	now := time.Now().Format("2006-01-02 15:04 (Monday)")
 	rt := fmt.Sprintf("%s %s, Go %s", runtime.GOOS, runtime.GOARCH, runtime.Version())
+	if isAndroid() {
+		rt = fmt.Sprintf("Android (arm64), Go %s", runtime.Version())
+	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "## Current Time\n%s\n\n## Runtime\n%s", now, rt)
+
+	if isAndroid() {
+		fmt.Fprintf(&sb, "\n\n## Platform\nAndroid Phone — use accessibility_action tool for all device interactions")
+	}
 
 	if channel != "" && chatID != "" {
 		fmt.Fprintf(&sb, "\n\n## Current Session\nChannel: %s\nChat ID: %s", channel, chatID)

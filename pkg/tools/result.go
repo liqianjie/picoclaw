@@ -50,6 +50,11 @@ type ToolResult struct {
 	// to carry stateful worker context across evaluation iterations.
 	Messages []providers.Message `json:"-"`
 
+	// LLMMedia contains data URLs (e.g. "data:image/jpeg;base64,...") that should be
+	// included in the tool result message's Media field for multimodal LLM consumption.
+	// Unlike Media (which is for sending files to the user), LLMMedia is for the LLM to "see".
+	LLMMedia []string `json:"llm_media,omitempty"`
+
 	// ArtifactTags exposes local artifact paths back to the LLM in a structured
 	// form, e.g. "[file:/tmp/example.png]". This is used when a tool produced a
 	// reusable local artifact but did not deliver it to the user yet.

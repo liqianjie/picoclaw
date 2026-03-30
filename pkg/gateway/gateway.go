@@ -300,6 +300,7 @@ func setupAndStartServices(
 
 	agentLoop.SetChannelManager(runningServices.ChannelManager)
 	agentLoop.SetMediaStore(runningServices.MediaStore)
+	agentLoop.SetupVisionModel()
 
 	if transcriber := voice.DetectTranscriber(cfg); transcriber != nil {
 		agentLoop.SetTranscriber(transcriber)
@@ -491,6 +492,7 @@ func restartServices(
 	al.SetMediaStore(runningServices.MediaStore)
 
 	al.SetChannelManager(runningServices.ChannelManager)
+	al.SetupVisionModel()
 
 	if err = runningServices.ChannelManager.Reload(context.Background(), cfg); err != nil {
 		return fmt.Errorf("error reload channels: %w", err)

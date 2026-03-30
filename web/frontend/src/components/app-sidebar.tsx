@@ -29,6 +29,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { useSidebarChannels } from "@/hooks/use-sidebar-channels"
 
@@ -69,6 +70,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routerState = useRouterState()
   const { i18n, t } = useTranslation()
   const currentPath = routerState.location.pathname
+  const { isMobile, setOpenMobile } = useSidebar()
   const {
     channelItems,
     hasMoreChannels,
@@ -78,6 +80,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     language: (i18n.resolvedLanguage ?? i18n.language ?? "").toLowerCase(),
     t,
   })
+
+  // 在移动端点击菜单项后关闭侧边栏
+  const handleNavClick = React.useCallback(() => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }, [isMobile, setOpenMobile])
 
   const navGroups: NavGroup[] = React.useMemo(() => {
     return [
@@ -191,7 +200,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             isActive={isActive}
                             className={`h-9 px-3 ${isActive ? "bg-accent/80 text-foreground font-medium" : "text-muted-foreground hover:bg-muted/60"}`}
                           >
-                            <Link to={item.url}>
+                            <Link to={item.url} onClick={handleNavClick}>
                               <item.icon
                                 className={`size-4 ${isActive ? "opacity-100" : "opacity-60"}`}
                               />

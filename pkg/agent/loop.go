@@ -234,6 +234,13 @@ func registerSharedTools(
 			agent.Tools.Register(messageTool)
 		}
 
+		// Accessibility action tool (for controlling Android device via Accessibility Service)
+		// The actual callback is injected later when SetChannelManager is called.
+		if cfg.Tools.IsToolEnabled("accessibility") {
+			accessibilityTool := tools.NewAccessibilityTool()
+			agent.Tools.Register(accessibilityTool)
+		}
+
 		// Send file tool (outbound media via MediaStore — store injected later by SetMediaStore)
 		if cfg.Tools.IsToolEnabled("send_file") {
 			sendFileTool := tools.NewSendFileTool(
@@ -910,6 +917,52 @@ func (al *AgentLoop) RegisterTool(tool tools.Tool) {
 
 func (al *AgentLoop) SetChannelManager(cm *channels.Manager) {
 	al.channelManager = cm
+
+	// Inject accessibility callback: when a Pico channel is available,
+	// wire up the AccessibilityTool to send action.execute via PicoChannel.
+	al.wireAccessibilityTool(cm)
+}
+
+// AccessibilityActionSender is the interface that PicoChannel implements
+// for sending accessibility actions to the Android client.
+type AccessibilityActionSender interface {
+	SendActionExecute(chatID, requestID string, action map[string]any) error
+	SetAccessibilityTool(tool *tools.AccessibilityTool)
+}
+
+// wireAccessibilityTool connects the AccessibilityTool to the PicoChannel.
+// When the Pico channel is available, it:
+// 1. Sets the action callback on the tool (so it can send action.execute)
+// 2. Sets the tool reference on the channel (so it can deliver action.result)
+func (al *AgentLoop) wireAccessibilityTool(cm *channels.Manager) {
+	if cm == nil {
+		return
+	}
+
+	// Find the Pico channel
+	ch, ok := cm.GetChannel("pico")
+	if !ok {
+		return
+	}
+
+	// Type-assert to AccessibilityActionSender
+	sender, ok := ch.(AccessibilityActionSender)
+	if !ok {
+		logger.WarnCF("agent", "Pico channel does not implement AccessibilityActionSender", nil)
+		return
+	}
+
+	// Wire up all accessibility tools in all agents
+	registry := al.GetRegistry()
+	registry.ForEachTool("accessibility_action", func(t tools.Tool) {
+		if at, ok := t.(*tools.AccessibilityTool); ok {
+			at.SetActionCallback(func(channel, chatID, requestID string, action map[string]any) error {
+				return sender.SendActionExecute(chatID, requestID, action)
+			})
+			sender.SetAccessibilityTool(at)
+			logger.InfoCF("agent", "Accessibility tool wired to Pico channel", nil)
+		}
+	})
 }
 
 // ReloadProviderAndConfig atomically swaps the provider and config with proper synchronization.
@@ -1036,6 +1089,123 @@ func (al *AgentLoop) SetMediaStore(s media.MediaStore) {
 			agent.Tools.SetMediaStore(s)
 		}
 	}
+
+	// Propagate store to accessibility_action tools (for screenshot → send image to user).
+	registry.ForEachTool("accessibility_action", func(t tools.Tool) {
+		if at, ok := t.(*tools.AccessibilityTool); ok {
+			at.SetMediaStore(s)
+		}
+	})
+}
+
+// SetupVisionModel discovers a vision-capable model and injects it into
+// accessibility tools for screenshot_vision analysis and paste_input field detection.
+//
+// Discovery priority:
+//  1. agents.defaults.image_model — explicit config (highest priority)
+//  2. model_list entries with "vision": true — explicit capability flag
+//  3. model name containing "4v" or "vision" — legacy heuristic fallback
+//
+// If no vision model is found, screenshot_vision falls back to local OCR only.
+func (al *AgentLoop) SetupVisionModel() {
+	cfg := al.cfg
+	if cfg == nil || len(cfg.ModelList) == 0 {
+		return
+	}
+
+	var visionModelCfg *config.ModelConfig
+
+	// Priority 1: agents.defaults.image_model (explicit config)
+	if imageModelName := cfg.Agents.Defaults.ImageModel; imageModelName != "" {
+		for i := range cfg.ModelList {
+			m := cfg.ModelList[i]
+			if m.ModelName == imageModelName {
+				if m.APIKey() != "" || m.APIBase != "" {
+					visionModelCfg = m
+					logger.InfoCF("agent", "Vision model selected from image_model config", map[string]any{
+						"model_name": m.ModelName,
+					})
+					break
+				}
+			}
+		}
+	}
+
+	// Priority 2: model_list entries with vision: true
+	// Prefer vision_only models first (specialized, usually cheaper), then multimodal models.
+	if visionModelCfg == nil {
+		var multimodalFallback *config.ModelConfig
+		for i := range cfg.ModelList {
+			m := cfg.ModelList[i]
+			if m.Vision && (m.APIKey() != "" || m.APIBase != "") {
+				if m.VisionOnly {
+					// vision_only model: best choice for screenshot analysis (specialized & cheap)
+					visionModelCfg = m
+					logger.InfoCF("agent", "Vision model selected: vision_only model", map[string]any{
+						"model_name": m.ModelName,
+					})
+					break
+				}
+				if multimodalFallback == nil {
+					multimodalFallback = m
+				}
+			}
+		}
+		if visionModelCfg == nil && multimodalFallback != nil {
+			visionModelCfg = multimodalFallback
+			logger.InfoCF("agent", "Vision model selected: multimodal model (no vision_only available)", map[string]any{
+				"model_name": multimodalFallback.ModelName,
+			})
+		}
+	}
+
+	// Priority 3: legacy heuristic — model name contains "4v" or "vision"
+	if visionModelCfg == nil {
+		for i := range cfg.ModelList {
+			m := cfg.ModelList[i]
+			lowerModel := strings.ToLower(m.Model)
+			lowerName := strings.ToLower(m.ModelName)
+			if strings.Contains(lowerModel, "4v") || strings.Contains(lowerName, "4v") ||
+				strings.Contains(lowerModel, "vision") || strings.Contains(lowerName, "vision") {
+				if m.APIKey() != "" || m.APIBase != "" {
+					visionModelCfg = m
+					logger.InfoCF("agent", "Vision model selected from name heuristic", map[string]any{
+						"model_name": m.ModelName,
+						"model":      m.Model,
+					})
+					break
+				}
+			}
+		}
+	}
+
+	if visionModelCfg == nil {
+		logger.InfoC("agent", "No vision model found in model_list. screenshot_vision will use OCR only.")
+		return
+	}
+
+	// Create a provider for the vision model
+	provider, modelID, err := providers.CreateProviderFromConfig(visionModelCfg)
+	if err != nil {
+		logger.WarnCF("agent", "Failed to create vision model provider", map[string]any{
+			"model": visionModelCfg.Model,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	logger.InfoCF("agent", "Vision model configured for screenshot analysis", map[string]any{
+		"model_name": visionModelCfg.ModelName,
+		"model":      modelID,
+	})
+
+	// Inject vision provider into all accessibility tools
+	registry := al.GetRegistry()
+	registry.ForEachTool("accessibility_action", func(t tools.Tool) {
+		if at, ok := t.(*tools.AccessibilityTool); ok {
+			at.SetVisionProvider(provider, modelID)
+		}
+	})
 }
 
 // SetTranscriber injects a voice transcriber for agent-level audio transcription.
@@ -1691,6 +1861,18 @@ func (al *AgentLoop) runTurn(ctx context.Context, ts *turnState) (turnResult, er
 	pendingMessages := append([]providers.Message(nil), ts.opts.InitialSteeringMessages...)
 	var finalContent string
 
+	// Repetitive tool call detection: track consecutive identical tool calls
+	// to break out of infinite loops (e.g., LLM repeatedly calling get_screen)
+	const maxRepetitiveToolCalls = 5
+	var lastToolCallSignature string
+	repetitiveCount := 0
+
+	// Sliding window pattern detection: track recent tool calls to detect
+	// alternating loops (e.g., back → screenshot → click → screenshot → back → ...)
+	const patternWindowSize = 12   // track last 12 tool calls
+	const patternThreshold = 8     // if same action appears 8+ times in window, it's a loop
+	var recentToolActions []string // sliding window of recent tool action names
+
 turnLoop:
 	for ts.currentIteration() < ts.agent.MaxIterations || len(pendingMessages) > 0 || func() bool {
 		graceful, _ := ts.gracefulInterruptRequested()
@@ -2133,6 +2315,39 @@ turnLoop:
 		}
 		logger.DebugCF("agent", "LLM response", llmResponseFields)
 
+		// Send LLM response feedback to chat channel if enabled
+		if al.cfg.Agents.Defaults.IsLLMResponseFeedbackEnabled() &&
+			ts.channel != "" &&
+			!ts.opts.SuppressToolFeedback {
+			maxLen := al.cfg.Agents.Defaults.GetToolFeedbackMaxResponseLength()
+			var llmFeedbackParts []string
+			if response.Content != "" {
+				contentPreview := utils.Truncate(response.Content, maxLen)
+				llmFeedbackParts = append(llmFeedbackParts, fmt.Sprintf("**Content:**\n```\n%s\n```", contentPreview))
+			}
+			if len(response.ToolCalls) > 0 {
+				var tcNames []string
+				for _, tc := range response.ToolCalls {
+					tcNames = append(tcNames, tc.Name)
+				}
+				llmFeedbackParts = append(llmFeedbackParts, fmt.Sprintf("**Tool Calls:** %s", strings.Join(tcNames, ", ")))
+			}
+			if response.Usage != nil {
+				llmFeedbackParts = append(llmFeedbackParts, fmt.Sprintf("**Tokens:** prompt=%d, completion=%d, total=%d",
+					response.Usage.PromptTokens, response.Usage.CompletionTokens, response.Usage.TotalTokens))
+			}
+			if len(llmFeedbackParts) > 0 {
+				llmFeedbackMsg := fmt.Sprintf("\U0001f916 **LLM Response** (iter %d)\n%s", iteration, strings.Join(llmFeedbackParts, "\n"))
+				fbCtx, fbCancel := context.WithTimeout(turnCtx, 3*time.Second)
+				_ = al.bus.PublishOutbound(fbCtx, bus.OutboundMessage{
+					Channel: ts.channel,
+					ChatID:  ts.chatID,
+					Content: llmFeedbackMsg,
+				})
+				fbCancel()
+			}
+		}
+
 		if len(response.ToolCalls) == 0 || gracefulTerminal {
 			responseContent := response.Content
 			if responseContent == "" && response.ReasoningContent != "" {
@@ -2174,6 +2389,78 @@ turnLoop:
 				"count":     len(normalizedToolCalls),
 				"iteration": iteration,
 			})
+
+		// Repetitive tool call detection: build a signature from tool names + args
+		{
+			var sigParts []string
+			for _, tc := range normalizedToolCalls {
+				argsJSON, _ := json.Marshal(tc.Arguments)
+				sigParts = append(sigParts, tc.Name+":"+string(argsJSON))
+			}
+			currentSignature := strings.Join(sigParts, "|")
+			if currentSignature == lastToolCallSignature {
+				repetitiveCount++
+			} else {
+				lastToolCallSignature = currentSignature
+				repetitiveCount = 1
+			}
+
+			if repetitiveCount >= maxRepetitiveToolCalls {
+				logger.WarnCF("agent", "Repetitive tool call detected, breaking loop",
+					map[string]any{
+						"agent_id":   ts.agent.ID,
+						"tool_calls": toolNames,
+						"count":      repetitiveCount,
+						"iteration":  iteration,
+					})
+				finalContent = fmt.Sprintf(
+					"I was stuck in a loop calling %s repeatedly (%d times) with no progress. "+
+						"The current screen may contain visual content (video/images) that I cannot parse via get_screen. "+
+						"Please try a more specific instruction, or I can use screenshot_vision to see the screen.",
+					strings.Join(toolNames, ", "), repetitiveCount)
+				break turnLoop
+			}
+
+			// Sliding window pattern detection: detect alternating loops
+			for _, tc := range normalizedToolCalls {
+				actionKey := tc.Name
+				if tc.Name == "accessibility_action" {
+					if actionArg, ok := tc.Arguments["action"]; ok {
+						actionKey = tc.Name + ":" + fmt.Sprintf("%v", actionArg)
+					}
+				}
+				recentToolActions = append(recentToolActions, actionKey)
+			}
+			// Keep window size bounded
+			if len(recentToolActions) > patternWindowSize {
+				recentToolActions = recentToolActions[len(recentToolActions)-patternWindowSize:]
+			}
+			// Check if any single tool dominates the window (appears too frequently)
+			if len(recentToolActions) >= patternWindowSize {
+				actionCounts := make(map[string]int)
+				for _, a := range recentToolActions {
+					actionCounts[a]++
+				}
+				for action, count := range actionCounts {
+					if count >= patternThreshold {
+						logger.WarnCF("agent", "Alternating loop pattern detected, breaking",
+							map[string]any{
+								"agent_id":        ts.agent.ID,
+								"dominant_action": action,
+								"count":           count,
+								"window_size":     len(recentToolActions),
+								"iteration":       iteration,
+							})
+						finalContent = fmt.Sprintf(
+							"I was stuck in an alternating loop — the action '%s' was called %d times in the last %d operations with no meaningful progress. "+
+								"The current app screen may not be responding to my actions as expected. "+
+								"Please provide more specific instructions or try a different approach.",
+							action, count, len(recentToolActions))
+						break turnLoop
+					}
+				}
+			}
+		}
 
 		allResponsesHandled := len(normalizedToolCalls) > 0
 		assistantMsg := providers.Message{

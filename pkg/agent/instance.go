@@ -86,12 +86,18 @@ func NewAgentInstance(
 		toolsRegistry.Register(tools.NewListDirTool(workspace, readRestrict, allowReadPaths))
 	}
 	if cfg.Tools.IsToolEnabled("exec") {
-		execTool, err := tools.NewExecToolWithConfig(workspace, restrict, cfg, allowReadPaths)
-		if err != nil {
-			logger.ErrorCF("agent", "Failed to initialize exec tool; continuing without exec",
-				map[string]any{"error": err.Error()})
+		// Android 上没有 sh / bash，且 seccomp 会阻止 faccessat2 系统调用
+		// 导致 SIGSYS 直接杀死进程，因此跳过 exec tool 注册
+		if isAndroid() {
+			logger.InfoCF("agent", "Skipping exec tool on Android (no shell available)", nil)
 		} else {
-			toolsRegistry.Register(execTool)
+			execTool, err := tools.NewExecToolWithConfig(workspace, restrict, cfg, allowReadPaths)
+			if err != nil {
+				logger.ErrorCF("agent", "Failed to initialize exec tool; continuing without exec",
+					map[string]any{"error": err.Error()})
+			} else {
+				toolsRegistry.Register(execTool)
+			}
 		}
 	}
 
@@ -340,4 +346,79 @@ func expandHome(path string) string {
 		return home
 	}
 	return path
+}
+
+// isAndroid 检测当前是否运行在 Android 环境中。
+// Android 上 GOOS=linux，无法通过 runtime.GOOS 区分。
+// 检查多个 Android 特征路径，因为 /system/build.prop 可能对普通 app 无读权限。
+func isAndroid() bool {
+	androidPaths := []string{
+		"/system/build.prop",  // 传统检测路径（部分设备需要root权限）
+		"/system/bin/dalvikvm", // Dalvik/ART 虚拟机
+		"/system/bin/app_process", // Android 应用进程启动器
+	}
+	for _, p := range androidPaths {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	// 备用：检查环境变量
+	if os.Getenv("ANDROID_ROOT") != "" || os.Getenv("ANDROID_DATA") != "" {
+		return true
+	}
+	return false
+}
+
+// detectOpenAppIntent 检测用户消息是否包含"打开应用"意图。
+// 支持中英文模式匹配：
+//   - 中文：打开微信、帮我打开微信、启动微信、进入微信 等
+//   - 英文：open WeChat、launch WeChat、start WeChat 等
+//
+// 返回应用名称（如"微信"、"WeChat"），如果不匹配则返回空字符串。
+func detectOpenAppIntent(userMessage string) string {
+	msg := strings.TrimSpace(userMessage)
+	if msg == "" {
+		return ""
+	}
+
+	// 中文模式：打开/启动/进入/运行 + 应用名
+	// 支持前缀（帮我、请、我要、我想）
+	chPrefixes := []string{
+		"帮我打开", "请打开", "我要打开", "我想打开",
+		"帮我启动", "请启动", "我要启动", "我想启动",
+		"帮我进入", "请进入", "我要进入", "我想进入",
+		"帮我运行", "请运行", "我要运行", "我想运行",
+		"打开", "启动", "进入", "运行",
+	}
+	for _, prefix := range chPrefixes {
+		if strings.HasPrefix(msg, prefix) {
+			appName := strings.TrimSpace(msg[len(prefix):])
+			// 过滤掉太长的文本（不像是应用名）或空文本
+			if appName != "" && len([]rune(appName)) <= 20 {
+				// 移除可能的尾缀（如"应用"、"app"）
+				appName = strings.TrimSuffix(appName, "应用")
+				appName = strings.TrimSuffix(appName, "App")
+				appName = strings.TrimSuffix(appName, "APP")
+				appName = strings.TrimSuffix(appName, "app")
+				appName = strings.TrimSpace(appName)
+				if appName != "" {
+					return appName
+				}
+			}
+		}
+	}
+
+	// 英文模式：open/launch/start + app name
+	lowerMsg := strings.ToLower(msg)
+	enPrefixes := []string{"open ", "launch ", "start "}
+	for _, prefix := range enPrefixes {
+		if strings.HasPrefix(lowerMsg, prefix) {
+			appName := strings.TrimSpace(msg[len(prefix):])
+			if appName != "" && len(appName) <= 50 {
+				return appName
+			}
+		}
+	}
+
+	return ""
 }

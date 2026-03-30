@@ -71,6 +71,8 @@ export function AddModelSheet({
   const [form, setForm] = useState<AddForm>(EMPTY_ADD_FORM)
   const [saving, setSaving] = useState(false)
   const [setAsDefault, setSetAsDefault] = useState(false)
+  const [vision, setVision] = useState(false)
+  const [visionOnly, setVisionOnly] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<
     Partial<Record<keyof AddForm, string>>
   >({})
@@ -84,6 +86,8 @@ export function AddModelSheet({
     if (open) {
       setForm(EMPTY_ADD_FORM)
       setSetAsDefault(false)
+      setVision(false)
+      setVisionOnly(false)
       setFieldErrors({})
       setServerError("")
     }
@@ -136,6 +140,8 @@ export function AddModelSheet({
         extra_body: form.extraBody.trim()
           ? JSON.parse(form.extraBody.trim())
           : undefined,
+        vision: vision || undefined,
+        vision_only: visionOnly || undefined,
       })
       if (setAsDefault) {
         await setDefaultModel(modelName)
@@ -219,6 +225,25 @@ export function AddModelSheet({
               checked={setAsDefault}
               onCheckedChange={setSetAsDefault}
             />
+
+            <SwitchCardField
+              label={t("models.vision.label")}
+              hint={t("models.vision.description")}
+              checked={vision}
+              onCheckedChange={(v) => {
+                setVision(v)
+                if (!v) setVisionOnly(false)
+              }}
+            />
+
+            {vision && (
+              <SwitchCardField
+                label={t("models.visionOnly.label")}
+                hint={t("models.visionOnly.description")}
+                checked={visionOnly}
+                onCheckedChange={setVisionOnly}
+              />
+            )}
 
             <AdvancedSection>
               <Field

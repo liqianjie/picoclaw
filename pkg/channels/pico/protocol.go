@@ -17,6 +17,12 @@ const (
 	TypeTypingStop    = "typing.stop"
 	TypeError         = "error"
 	TypePong          = "pong"
+
+	// TypeActionExecute is sent from server to client to request an accessibility action.
+	TypeActionExecute = "action.execute"
+
+	// TypeActionResult is sent from client to server with the result of an accessibility action.
+	TypeActionResult = "action.result"
 )
 
 // PicoMessage is the wire format for all Pico Protocol messages.

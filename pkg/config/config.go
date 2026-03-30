@@ -302,8 +302,10 @@ type SubTurnConfig struct {
 }
 
 type ToolFeedbackConfig struct {
-	Enabled       bool `json:"enabled"         env:"PICOCLAW_AGENTS_DEFAULTS_TOOL_FEEDBACK_ENABLED"`
-	MaxArgsLength int  `json:"max_args_length" env:"PICOCLAW_AGENTS_DEFAULTS_TOOL_FEEDBACK_MAX_ARGS_LENGTH"`
+	Enabled            bool `json:"enabled"              env:"PICOCLAW_AGENTS_DEFAULTS_TOOL_FEEDBACK_ENABLED"`
+	MaxArgsLength      int  `json:"max_args_length"      env:"PICOCLAW_AGENTS_DEFAULTS_TOOL_FEEDBACK_MAX_ARGS_LENGTH"`
+	IncludeLLMResponse bool `json:"include_llm_response" env:"PICOCLAW_AGENTS_DEFAULTS_TOOL_FEEDBACK_INCLUDE_LLM_RESPONSE"`
+	MaxResponseLength  int  `json:"max_response_length"  env:"PICOCLAW_AGENTS_DEFAULTS_TOOL_FEEDBACK_MAX_RESPONSE_LENGTH"`
 }
 
 type AgentDefaults struct {
@@ -349,6 +351,19 @@ func (d *AgentDefaults) GetToolFeedbackMaxArgsLength() int {
 // IsToolFeedbackEnabled returns true when tool feedback messages should be sent to the chat.
 func (d *AgentDefaults) IsToolFeedbackEnabled() bool {
 	return d.ToolFeedback.Enabled
+}
+
+// IsLLMResponseFeedbackEnabled returns true when LLM response content should also be sent to the chat for debugging.
+func (d *AgentDefaults) IsLLMResponseFeedbackEnabled() bool {
+	return d.ToolFeedback.Enabled && d.ToolFeedback.IncludeLLMResponse
+}
+
+// GetToolFeedbackMaxResponseLength returns the max LLM response preview length for feedback messages.
+func (d *AgentDefaults) GetToolFeedbackMaxResponseLength() int {
+	if d.ToolFeedback.MaxResponseLength > 0 {
+		return d.ToolFeedback.MaxResponseLength
+	}
+	return 500
 }
 
 // GetModelName returns the effective model name for the agent defaults.
@@ -675,6 +690,18 @@ type ModelConfig struct {
 
 	APIKeys SecureStrings `json:"api_keys,omitzero" yaml:"api_keys,omitempty"` // API authentication keys (multiple keys for failover)
 
+	// Vision marks this model as supporting vision/multimodal inputs (images).
+	// When true, this model can be used for screenshot_vision analysis and paste_input field detection.
+	// Many models (e.g. gpt-4o, claude-sonnet-4, kimi-k2.5) support both text and vision.
+	Vision bool `json:"vision,omitempty"`
+
+	// VisionOnly marks this model as a vision-only model that should NOT be used for text chat.
+	// When true, the model will only be used for screenshot analysis and visual tasks,
+	// and cannot be selected as the default chat model.
+	// Examples: glm-4v-flash (specialized vision model, poor at general text conversation).
+	// For multimodal models that handle both text and vision (e.g. kimi-k2.5, gpt-4o), leave this false.
+	VisionOnly bool `json:"vision_only,omitempty"`
+
 	// isVirtual marks this model as a virtual model generated from multi-key expansion.
 	// Virtual models should not be persisted to config files.
 	isVirtual bool
@@ -918,6 +945,7 @@ type ToolsConfig struct {
 	Subagent        ToolConfig         `json:"subagent"          yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_SUBAGENT_"`
 	WebFetch        ToolConfig         `json:"web_fetch"         yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_WEB_FETCH_"`
 	WriteFile       ToolConfig         `json:"write_file"        yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_WRITE_FILE_"`
+	Accessibility   ToolConfig         `json:"accessibility"     yaml:"-"                                                       envPrefix:"PICOCLAW_TOOLS_ACCESSIBILITY_"`
 }
 
 // IsFilterSensitiveDataEnabled returns true if sensitive data filtering is enabled
@@ -1371,6 +1399,8 @@ func (t *ToolsConfig) IsToolEnabled(name string) bool {
 		return t.WriteFile.Enabled
 	case "mcp":
 		return t.MCP.Enabled
+	case "accessibility":
+		return t.Accessibility.Enabled
 	default:
 		return true
 	}

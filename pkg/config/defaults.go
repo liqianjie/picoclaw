@@ -39,8 +39,10 @@ func DefaultConfig() *Config {
 				SummarizeTokenPercent:     75,
 				SteeringMode:              "one-at-a-time",
 				ToolFeedback: ToolFeedbackConfig{
-					Enabled:       false,
-					MaxArgsLength: 300,
+					Enabled:            true,
+					MaxArgsLength:      500,
+					IncludeLLMResponse: true,
+					MaxResponseLength:  800,
 				},
 				SplitOnMarker: false,
 			},
@@ -179,6 +181,7 @@ func DefaultConfig() *Config {
 				ModelName: "gpt-5.4",
 				Model:     "openai/gpt-5.4",
 				APIBase:   "https://api.openai.com/v1",
+				Vision:    true,
 			},
 
 			// Anthropic Claude - https://console.anthropic.com/settings/keys
@@ -186,6 +189,7 @@ func DefaultConfig() *Config {
 				ModelName: "claude-sonnet-4.6",
 				Model:     "anthropic/claude-sonnet-4.6",
 				APIBase:   "https://api.anthropic.com/v1",
+				Vision:    true,
 			},
 
 			// DeepSeek - https://platform.deepseek.com/
@@ -200,6 +204,7 @@ func DefaultConfig() *Config {
 				ModelName: "gemini-2.0-flash",
 				Model:     "gemini/gemini-2.0-flash-exp",
 				APIBase:   "https://generativelanguage.googleapis.com/v1beta",
+				Vision:    true,
 			},
 
 			// Qwen (通义千问) - https://dashscope.console.aliyun.com/apiKey
@@ -207,6 +212,7 @@ func DefaultConfig() *Config {
 				ModelName: "qwen-plus",
 				Model:     "qwen/qwen-plus",
 				APIBase:   "https://dashscope.aliyuncs.com/compatible-mode/v1",
+				Vision:    true,
 			},
 
 			// Moonshot (月之暗面) - https://platform.moonshot.cn/console/api-keys
@@ -214,6 +220,12 @@ func DefaultConfig() *Config {
 				ModelName: "moonshot-v1-8k",
 				Model:     "moonshot/moonshot-v1-8k",
 				APIBase:   "https://api.moonshot.cn/v1",
+			},
+			{
+				ModelName: "kimi-k2.5",
+				Model:     "moonshot/kimi-k2.5",
+				APIBase:   "https://api.moonshot.cn/v1",
+				Vision:    true,
 			},
 
 			// Groq - https://console.groq.com/keys
@@ -233,6 +245,7 @@ func DefaultConfig() *Config {
 				ModelName: "openrouter-gpt-5.4",
 				Model:     "openrouter/openai/gpt-5.4",
 				APIBase:   "https://openrouter.ai/api/v1",
+				Vision:    true,
 			},
 
 			// NVIDIA - https://build.nvidia.com/
@@ -266,6 +279,7 @@ func DefaultConfig() *Config {
 				ModelName: "doubao-pro",
 				Model:     "volcengine/doubao-pro-32k",
 				APIBase:   "https://ark.cn-beijing.volces.com/api/v3",
+				Vision:    true,
 			},
 
 			// ShengsuanYun (神算云)
@@ -280,6 +294,7 @@ func DefaultConfig() *Config {
 				ModelName:  "gemini-flash",
 				Model:      "antigravity/gemini-3-flash",
 				AuthMethod: "oauth",
+				Vision:     true,
 			},
 
 			// GitHub Copilot - https://github.com/settings/tokens
@@ -288,6 +303,7 @@ func DefaultConfig() *Config {
 				Model:      "github-copilot/gpt-5.4",
 				APIBase:    "http://localhost:4321",
 				AuthMethod: "oauth",
+				Vision:     true,
 			},
 
 			// Ollama (local) - https://ollama.com
@@ -311,9 +327,10 @@ func DefaultConfig() *Config {
 				APIBase:   "https://api.avian.io/v1",
 			},
 			{
-				ModelName: "kimi-k2.5",
+				ModelName: "avian-kimi-k2.5",
 				Model:     "avian/moonshotai/kimi-k2.5",
 				APIBase:   "https://api.avian.io/v1",
+				Vision:    true,
 			},
 
 			// Minimax - https://api.minimaxi.com/
@@ -322,6 +339,7 @@ func DefaultConfig() *Config {
 				Model:     "minimax/MiniMax-M2.5",
 				APIBase:   "https://api.minimaxi.com/v1",
 				ExtraBody: map[string]any{"reasoning_split": true},
+				Vision:    true,
 			},
 
 			// LongCat - https://longcat.chat/platform
@@ -498,6 +516,9 @@ func DefaultConfig() *Config {
 				Enabled: true,
 			},
 			WriteFile: ToolConfig{
+				Enabled: true,
+			},
+			Accessibility: ToolConfig{
 				Enabled: true,
 			},
 		},
