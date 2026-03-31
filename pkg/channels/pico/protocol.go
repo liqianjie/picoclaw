@@ -23,6 +23,8 @@ const (
 
 	// TypeActionResult is sent from client to server with the result of an accessibility action.
 	TypeActionResult = "action.result"
+
+	PicoTokenPrefix = "pico-"
 )
 
 // PicoMessage is the wire format for all Pico Protocol messages.

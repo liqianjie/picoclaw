@@ -68,6 +68,7 @@ func resetGatewayTestState(t *testing.T) {
 	originalRestartGracePeriod := gatewayRestartGracePeriod
 	originalRestartForceKillWindow := gatewayRestartForceKillWindow
 	originalRestartPollInterval := gatewayRestartPollInterval
+	t.Setenv("PICOCLAW_HOME", t.TempDir())
 	t.Cleanup(func() {
 		gatewayHealthGet = originalHealthGet
 		gatewayRestartGracePeriod = originalRestartGracePeriod
@@ -76,6 +77,8 @@ func resetGatewayTestState(t *testing.T) {
 
 		gateway.mu.Lock()
 		gateway.cmd = nil
+		gateway.pidData = nil
+		gateway.owned = false
 		gateway.bootDefaultModel = ""
 		gateway.bootConfigSignature = ""
 		setGatewayRuntimeStatusLocked("stopped")
@@ -162,6 +165,17 @@ func TestGatewayStartReady_DefaultModelWithoutCredential(t *testing.T) {
 	}
 	if !strings.Contains(reason, "no credentials configured") {
 		t.Fatalf("gatewayStartReady() reason = %q, want contains %q", reason, "no credentials configured")
+	}
+}
+
+func TestGatewayCommandArgsIncludesDebugFlagWhenEnabled(t *testing.T) {
+	h := NewHandler(filepath.Join(t.TempDir(), "config.json"))
+	h.SetDebug(true)
+
+	args := h.gatewayCommandArgs()
+	want := []string{"gateway", "-E", "-d"}
+	if strings.Join(args, " ") != strings.Join(want, " ") {
+		t.Fatalf("gatewayCommandArgs() = %v, want %v", args, want)
 	}
 }
 
@@ -469,9 +483,6 @@ func TestGatewayStatusReportsRunningFromHealthProbe(t *testing.T) {
 
 	if got := body["gateway_status"]; got != "running" {
 		t.Fatalf("gateway_status = %#v, want %q", got, "running")
-	}
-	if got := body["pid"]; got != float64(cmd.Process.Pid) {
-		t.Fatalf("pid = %#v, want %d", got, cmd.Process.Pid)
 	}
 	if got := body["gateway_restart_required"]; got != false {
 		t.Fatalf("gateway_restart_required = %#v, want false", got)

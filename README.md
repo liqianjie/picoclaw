@@ -464,6 +464,8 @@ Talk to your PicoClaw through 17+ messaging platforms:
 
 > All webhook-based channels share a single Gateway HTTP server (`gateway.host`:`gateway.port`, default `127.0.0.1:18790`). Feishu uses WebSocket/SDK mode and does not use the shared HTTP server.
 
+> Log verbosity is controlled by `gateway.log_level` (default: `warn`). Supported values: `debug`, `info`, `warn`, `error`, `fatal`. Can also be set via `PICOCLAW_LOG_LEVEL`. See [Configuration](docs/configuration.md#gateway-log-level) for details.
+
 For detailed channel setup instructions, see [Chat Apps Configuration](docs/chat-apps.md).
 
 ## 🔧 Tools
@@ -574,6 +576,8 @@ PicoClaw supports scheduled reminders and recurring tasks through the `cron` too
 * **Recurring tasks**: "Remind me every 2 hours" -> triggers every 2 hours
 * **Cron expressions**: "Remind me at 9am daily" -> uses cron expression
 
+See [docs/cron.md](docs/cron.md) for current schedule types, execution modes, command-job gates, and persistence details.
+
 ## 📚 Documentation
 
 For detailed guides beyond this README:
@@ -583,6 +587,7 @@ For detailed guides beyond this README:
 | [Docker & Quick Start](docs/docker.md) | Docker Compose setup, Launcher/Agent modes |
 | [Chat Apps](docs/chat-apps.md) | All 17+ channel setup guides |
 | [Configuration](docs/configuration.md) | Environment variables, workspace layout, security sandbox |
+| [Scheduled Tasks and Cron Jobs](docs/cron.md) | Cron schedule types, deliver modes, command gates, job storage |
 | [Providers & Models](docs/providers.md) | 30+ LLM providers, model routing, model_list configuration |
 | [Spawn & Async Tasks](docs/spawn-tasks.md) | Quick tasks, long tasks with spawn, async sub-agent orchestration |
 | [Hooks](docs/hooks/README.md) | Event-driven hook system: observers, interceptors, approval hooks |

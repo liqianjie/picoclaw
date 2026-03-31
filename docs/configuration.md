@@ -6,6 +6,8 @@
 
 Config file: `~/.picoclaw/config.json`
 
+> **Security Configuration:** For storing API keys, tokens, and other sensitive data, see the [Security Configuration Guide](security_configuration.md).
+
 ### Environment Variables
 
 You can override default paths using environment variables. This is useful for portable installations, containerized deployments, or running picoclaw as a system service. These variables are independent and control different paths.
@@ -38,12 +40,12 @@ PICOCLAW_HOME=/srv/picoclaw PICOCLAW_CONFIG=/srv/picoclaw/main.json picoclaw gat
 ```json
 {
   "gateway": {
-    "log_level": "fatal"
+    "log_level": "warn"
   }
 }
 ```
 
-When omitted, the default is `fatal`. Supported values: `debug`, `info`, `warn`, `error`, `fatal`.
+When omitted, the default is `warn`. Supported values: `debug`, `info`, `warn`, `error`, `fatal`.
 
 You can also override this with the environment variable `PICOCLAW_LOG_LEVEL`.
 
@@ -479,8 +481,9 @@ This design also enables **multi-agent support** with flexible provider selectio
 
 - **Different agents, different providers**: Each agent can use its own LLM provider
 - **Model fallbacks**: Configure primary and fallback models for resilience
-- **Load balancing**: Distribute requests across multiple endpoints
+- **Load balancing**: Distribute requests across multiple endpoints or keys
 - **Centralized configuration**: Manage all providers in one place
+- **Model enable/disable**: Use the `enabled` field to temporarily disable a model without removing its configuration
 
 #### 🔒 Security Configuration (Recommended)
 
@@ -560,6 +563,7 @@ For complete documentation, see [`security_configuration.md`](security_configura
 | **通义千问 (Qwen)**     | `qwen/`           | `https://dashscope.aliyuncs.com/compatible-mode/v1` | OpenAI    | [Get Key](https://dashscope.console.aliyun.com)                  |
 | **NVIDIA**              | `nvidia/`         | `https://integrate.api.nvidia.com/v1`               | OpenAI    | [Get Key](https://build.nvidia.com)                              |
 | **Ollama**              | `ollama/`         | `http://localhost:11434/v1`                         | OpenAI    | Local (no key needed)                                            |
+| **LM Studio**           | `lmstudio/`       | `http://localhost:1234/v1`                          | OpenAI    | Optional (local default: no key)                                 |
 | **OpenRouter**          | `openrouter/`     | `https://openrouter.ai/api/v1`                      | OpenAI    | [Get Key](https://openrouter.ai/keys)                            |
 | **LiteLLM Proxy**       | `litellm/`        | `http://localhost:4000/v1`                          | OpenAI    | Your LiteLLM proxy key                                           |
 | **VLLM**                | `vllm/`           | `http://localhost:8000/v1`                          | OpenAI    | Local                                                            |
@@ -581,22 +585,22 @@ For complete documentation, see [`security_configuration.md`](security_configura
     {
       "model_name": "ark-code-latest",
       "model": "volcengine/ark-code-latest",
-      "api_key": "sk-your-api-key"
+      "api_keys": ["sk-your-api-key"]
     },
     {
       "model_name": "gpt-5.4",
       "model": "openai/gpt-5.4",
-      "api_key": "sk-your-openai-key"
+      "api_keys": ["sk-your-openai-key"]
     },
     {
       "model_name": "claude-sonnet-4.6",
       "model": "anthropic/claude-sonnet-4.6",
-      "api_key": "sk-ant-your-key"
+      "api_keys": ["sk-ant-your-key"]
     },
     {
       "model_name": "glm-4.7",
       "model": "zhipu/glm-4.7",
-      "api_key": "your-zhipu-key"
+      "api_keys": ["your-zhipu-key"]
     }
   ],
   "agents": {
@@ -607,7 +611,9 @@ For complete documentation, see [`security_configuration.md`](security_configura
 }
 ```
 
-> **Security Note**: You can remove `api_key` fields from your config and store them in `.security.yml` instead. See [Security Configuration](#-security-configuration-recommended) above for details.
+> **Security Note**: You can remove `api_keys` fields from your config and store them in `.security.yml` instead. See [Security Configuration](#-security-configuration-recommended) above for details.
+>
+> **Note**: The `enabled` field can be set to `false` to disable a model entry without removing it. When omitted, it defaults to `true` during migration for models that have API keys.
 
 #### Vendor-Specific Examples
 
@@ -684,7 +690,7 @@ For direct Anthropic API access or custom endpoints that only support Anthropic'
 {
   "model_name": "claude-opus-4-6",
   "model": "anthropic-messages/claude-opus-4-6",
-  "api_key": "sk-ant-your-key",
+  "api_keys": ["sk-ant-your-key"],
   "api_base": "https://api.anthropic.com"
 }
 ```
@@ -702,6 +708,21 @@ For direct Anthropic API access or custom endpoints that only support Anthropic'
   "model": "ollama/llama3"
 }
 ```
+
+</details>
+
+<details>
+<summary><b>LM Studio (local)</b></summary>
+
+```json
+{
+  "model_name": "lmstudio-local",
+  "model": "lmstudio/openai/gpt-oss-20b"
+}
+```
+
+`api_base` defaults to `http://localhost:1234/v1`. API key is optional unless your LM Studio server enables authentication.<br/>
+PicoClaw sends OpenAI-compatible requests to LM Studio, and strips the `lmstudio/` prefix before sending requests, so `lmstudio/openai/gpt-oss-20b` sends `openai/gpt-oss-20b` to the LM Studio server.
 
 </details>
 
@@ -759,13 +780,13 @@ model_list:
       "model_name": "gpt-5.4",
       "model": "openai/gpt-5.4",
       "api_base": "https://api1.example.com/v1",
-      "api_key": "sk-key1"
+      "api_keys": ["sk-key1"]
     },
     {
       "model_name": "gpt-5.4",
       "model": "openai/gpt-5.4",
       "api_base": "https://api2.example.com/v1",
-      "api_key": "sk-key2"
+      "api_keys": ["sk-key2"]
     }
   ]
 }
@@ -773,7 +794,7 @@ model_list:
 
 #### Migration from Legacy `providers` Config
 
-The old `providers` configuration is **deprecated** but still supported for backward compatibility. See [docs/migration/model-list-migration.md](../migration/model-list-migration.md) for the full guide.
+The old `providers` configuration is **deprecated** and has been removed in V2. Existing V0/V1 configs are auto-migrated. See [docs/migration/model-list-migration.md](../migration/model-list-migration.md) for the full guide.
 
 ### Provider Architecture
 
@@ -783,7 +804,7 @@ PicoClaw routes providers by protocol family:
 - **Anthropic**: Claude-native API behavior.
 - **Codex/OAuth**: OpenAI OAuth/token authentication route.
 
-This keeps the runtime lightweight while making new OpenAI-compatible backends mostly a config operation (`api_base` + `api_key`).
+This keeps the runtime lightweight while making new OpenAI-compatible backends mostly a config operation (`api_base` + `api_keys`).
 
 <details>
 <summary><b>Zhipu (legacy providers format)</b></summary>
